@@ -1,0 +1,9 @@
+{
+  "name": "pages!",
+  "short_name": "pages!",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#10171d",
+  "theme_color": "#0f5c6e"
+}
