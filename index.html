@@ -108,6 +108,8 @@
 </html>
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/service-worker.js');
+    navigator.serviceWorker.register('./sw.js')
+      .then(() => console.log('Service Worker registered'))
+      .catch((error) => console.log('Service Worker registration failed:', error));
   }
 </script>
