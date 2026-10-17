@@ -6,7 +6,7 @@
   "display": "standalone",
   "background_color": "#10171d",
   "theme_color": "#0f5c6e",
-  "description": "pages! is a secure, offline document editor with lockable vaults.",
+  "description": "pages! is a secure offline document editor with lockable vaults.",
   "icons": [
     {
       "src": "icon-192.png",
