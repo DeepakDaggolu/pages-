@@ -20,8 +20,10 @@ jobs:
           java-version: 21
       - name: Prepare web files
         run: |
+          ls -la
           mkdir www
-          cp index.html app.js style.css manifest.json icon-192.png icon-512.png www/
+          cp index.html app.js style.css manifest.json sw.js www/
+          cp *.png www/ || true
       - name: Create Android project
         run: |
           npm init -y
