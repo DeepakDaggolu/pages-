@@ -66,7 +66,7 @@ async function decrypt(k, p) {
 }
 
 /* ---------- sanitizer (allow-list) ---------- */
-const TAGS = new Set(['P','BR','B','STRONG','I','EM','U','S','STRIKE','H1','H2','H3','UL','OL','LI','BLOCKQUOTE','A','DIV','SPAN','FONT','MARK','IMG']);
+const TAGS = new Set(['P','BR','B','STRONG','I','EM','U','S','STRIKE','H1','H2','H3','UL','OL','LI','BLOCKQUOTE','A','DIV','SPAN','FONT','MARK','IMG','TABLE','TBODY','THEAD','TR','TD','TH','HR']);
 const FACES = new Set(['pg-serif','pg-sans','pg-mono','pg-hand']);
 const ALIGNABLE = new Set(['P','DIV','H1','H2','H3','LI','BLOCKQUOTE']);
 function sanitize(html) {
@@ -216,7 +216,11 @@ function fit() {   // shrink the page to fit narrow phone screens
 }
 function applyLayout(d) {
   const l = d.layout || DEFAULT_LAYOUT;
-  $('editor').className = 'page s-' + l.s + ' o-' + l.o; fit();
+  const e = $('editor');
+  e.className = 'page s-' + l.s + ' o-' + l.o + (d.margin ? ' m-' + d.margin : '');
+  e.style.setProperty('--pgbg', d.pageColor || '#ffffff');   // default: white page, black text
+  e.style.setProperty('--pgink', d.textColor || '#000000');
+  fit();
 }
 async function pickLayout(l) {
   l = l || DEFAULT_LAYOUT;
@@ -429,7 +433,7 @@ const FILE_CSS = 'body{max-width:720px;margin:2rem auto;padding:0 1rem;font:18px
   + 'font[size="1"]{font-size:.7em}font[size="2"]{font-size:.85em}font[size="4"]{font-size:1.15em}font[size="5"]{font-size:1.5em}'
   + 'font[size="6"]{font-size:2em}font[size="7"]{font-size:2.6em}mark{background:#ffe066}'
   + 'blockquote{margin:1em 0;padding-left:14px;border-left:3px solid #999;color:#555}'
-  + 'img{max-width:100%;height:auto}[align=center]{text-align:center}[align=right]{text-align:right}[align=justify]{text-align:justify}';
+  + 'table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:6px}img{max-width:100%;height:auto}[align=center]{text-align:center}[align=right]{text-align:right}[align=justify]{text-align:justify}';
 
 function download(name, type, text) {
   const url = URL.createObjectURL(new Blob([text], { type }));
@@ -526,6 +530,24 @@ $('layout').onclick = async () => {
   if (l) { d.layout = l; applyLayout(d); queueSave(); }
 };
 addEventListener('resize', fit);
+document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('[data-tab]').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('[data-panel]').forEach(p => { p.hidden = p.dataset.panel !== b.dataset.tab; });
+});
+function onDocMenu(id, fn) {
+  $(id).addEventListener('change', e => {
+    const v = e.target.value; e.target.value = '';
+    if (!v || !cur || !docs.has(cur)) return;
+    const d = docs.get(cur); fn(d, v); applyLayout(d); queueSave();
+  });
+}
+onDocMenu('margins', (d, v) => { d.margin = v; });
+onDocMenu('pageColor', (d, v) => {
+  d.pageColor = v;
+  if (v === '#1e1e1e' && (!d.textColor || d.textColor === '#000000')) d.textColor = '#ffffff';
+  else if (v !== '#1e1e1e' && d.textColor === '#ffffff') d.textColor = '#000000';
+});
+onDocMenu('docColor', (d, v) => { d.textColor = v; });
 
 // Remember the selection so toolbar menus (font, size, color) still apply to it.
 let lastRange = null;
@@ -540,7 +562,7 @@ function restoreSel() {
 }
 
 // Keep the editor focused while using the toolbar buttons (menus need their normal behavior).
-document.querySelector('.tools').addEventListener('mousedown', e => { if (e.target.tagName !== 'SELECT') e.preventDefault(); });
+document.querySelector('.ribbon').addEventListener('mousedown', e => { if (e.target.tagName !== 'SELECT') e.preventDefault(); });
 
 function clearColor() {
   const s = getSelection();
@@ -584,22 +606,28 @@ $('link').onclick = async () => {
 };
 
 // Paste: images (screenshots) are shrunk and inserted; everything else is pasted as plain text.
+const shrink = im => {
+  const k = Math.min(1, 1000 / im.width), c = document.createElement('canvas');
+  c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(im, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.82);
+};
 function imgToData(file) {
   return new Promise((res, rej) => {
     const fr = new FileReader();
     fr.onerror = rej;
-    fr.onload = () => {
-      const im = new Image();
-      im.onerror = rej;
-      im.onload = () => {
-        const k = Math.min(1, 1000 / im.width), c = document.createElement('canvas');
-        c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
-        const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(im, 0, 0, c.width, c.height);
-        res(c.toDataURL('image/jpeg', 0.82));
-      };
-      im.src = fr.result;
-    };
+    fr.onload = () => { const im = new Image(); im.onerror = rej; im.onload = () => res(shrink(im)); im.src = fr.result; };
     fr.readAsDataURL(file);
+  });
+}
+function fixImages() {   // keyboards can insert pictures as blob: links; turn them into saved data
+  $('editor').querySelectorAll('img').forEach(im => {
+    if (/^data:image\//i.test(im.src) || im.dataset.fix) return;
+    im.dataset.fix = '1';
+    const c = new Image();
+    c.onload = () => { try { im.src = shrink(c); queueSave(); } catch { im.remove(); } };
+    c.onerror = () => { im.remove(); say('Could not add that picture. Use Insert → Image instead.'); };
+    c.src = im.src;
   });
 }
 async function insertImage(file) {
@@ -609,9 +637,31 @@ async function insertImage(file) {
 $('editor').addEventListener('paste', e => {
   e.preventDefault();
   const cd = e.clipboardData || window.clipboardData;
-  const img = [...(cd.files || [])].find(f => /^image\//.test(f.type));
-  if (img) insertImage(img); else document.execCommand('insertText', false, cd.getData('text/plain'));
+  const files = [...(cd.files || []), ...[...(cd.items || [])].filter(i => i.kind === 'file').map(i => i.getAsFile())].filter(Boolean);
+  const img = files.find(f => /^image\//.test(f.type));
+  if (img) insertImage(img);
+  else { const t = cd.getData('text/plain'); if (t) document.execCommand('insertText', false, t); else say('Nothing to paste. For a screenshot, try Insert → Paste image or Image.'); }
 });
+$('editor').addEventListener('input', fixImages);
+$('pasteImg').onclick = async () => {
+  if (!editable()) return;
+  try {
+    for (const it of await navigator.clipboard.read()) {
+      const t = it.types.find(x => x.startsWith('image/'));
+      if (t) { restoreSel(); await insertImage(new File([await it.getType(t)], 'clip', { type: t })); return; }
+    }
+    say('No image on the clipboard. Copy a picture first, or use Image to pick one from your gallery.');
+  } catch { say('This phone blocked clipboard access. Use Image to pick the screenshot from your gallery.'); }
+};
+$('tableBtn').onclick = async () => {
+  if (!editable()) return;
+  const n = [2, 3, 4, 5, 6, 7, 8].map(x => [String(x), String(x)]);
+  const r = await ask({ title: 'Insert table', fields: [{ type: 'select', label: 'Rows', options: n }, { type: 'select', label: 'Columns', options: n }], ok: 'Insert' }, ['3', '3']);
+  if (!r) return;
+  restoreSel();
+  document.execCommand('insertHTML', false, '<table><tbody>' + ('<tr>' + '<td><br></td>'.repeat(+r[1]) + '</tr>').repeat(+r[0]) + '</tbody></table><p><br></p>');
+  queueSave();
+};
 $('imgBtn').onclick = () => { if (editable()) $('imgIn').click(); };
 $('imgIn').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) { restoreSel(); insertImage(f); } };
 
