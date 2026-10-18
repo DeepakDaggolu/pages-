@@ -31,8 +31,13 @@ input,select{font:inherit;color:inherit;background:var(--paper);border:1px solid
 .tools button{flex:none;min-width:40px}
 .tools select{flex:none;min-height:40px;padding:6px 8px}
 .sep{flex:none;width:1px;background:var(--line);margin:4px 2px}
-.page{flex:1;overflow:auto;margin:10px;padding:20px;background:var(--paper);border:1px solid var(--line);
-  border-radius:6px;font:1.08rem/1.65 var(--doc);outline:none;max-width:780px;width:calc(100% - 20px);align-self:center;
+.scroller{flex:1;overflow:auto;padding:10px}
+.s-postcard{--a:4in;--b:6in;--m:.5in}.s-letter{--a:8.5in;--b:11in;--m:.75in}.s-legal{--a:8.5in;--b:14in;--m:.75in}
+.s-a4{--a:8.27in;--b:11.69in;--m:.75in}.s-a5{--a:5.83in;--b:8.27in;--m:.6in}
+.o-portrait{--pw:var(--a);--ph:var(--b)}.o-landscape{--pw:var(--b);--ph:var(--a)}
+.page{box-sizing:border-box;width:var(--pw);min-height:var(--ph);margin:0 auto;padding:var(--m);
+  background:linear-gradient(var(--paper) calc(100% - 3px),var(--line) 0) 0 0/100% calc(var(--ph) - 2*var(--m)) repeat-y content-box,var(--paper);
+  border:1px solid var(--line);box-shadow:0 2px 12px rgba(0,0,0,.18);font:1.08rem/1.65 var(--doc);outline:none;
   -webkit-user-select:text;user-select:text}
 .page h1{font-size:1.7rem;line-height:1.2}
 .page h2{font-size:1.3rem;line-height:1.25}
@@ -91,3 +96,16 @@ input,select{font:inherit;color:inherit;background:var(--paper);border:1px solid
   .page{border:0;margin:0;padding:0;overflow:visible;max-width:none;width:auto;background:#fff;color:#000}
 }
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+
+/* print: each Doc prints at its chosen page size */
+@page postcard-p{size:4in 6in;margin:.5in}.s-postcard.o-portrait{page:postcard-p}
+@page postcard-l{size:6in 4in;margin:.5in}.s-postcard.o-landscape{page:postcard-l}
+@page letter-p{size:8.5in 11in;margin:.75in}.s-letter.o-portrait{page:letter-p}
+@page letter-l{size:11in 8.5in;margin:.75in}.s-letter.o-landscape{page:letter-l}
+@page legal-p{size:8.5in 14in;margin:.75in}.s-legal.o-portrait{page:legal-p}
+@page legal-l{size:14in 8.5in;margin:.75in}.s-legal.o-landscape{page:legal-l}
+@page a4-p{size:210mm 297mm;margin:.75in}.s-a4.o-portrait{page:a4-p}
+@page a4-l{size:297mm 210mm;margin:.75in}.s-a4.o-landscape{page:a4-l}
+@page a5-p{size:148mm 210mm;margin:.75in}.s-a5.o-portrait{page:a5-p}
+@page a5-l{size:210mm 148mm;margin:.75in}.s-a5.o-landscape{page:a5-l}
+@media print{.scroller{overflow:visible;padding:0}.page{zoom:1!important;min-height:0;box-shadow:none}}
