@@ -76,7 +76,7 @@ function sanitize(html) {
 }
 
 /* ---------- dialog (replaces prompt/confirm so passwords stay hidden) ---------- */
-function ask({ title, msg = '', fields = [], ok = 'OK', danger = false, validate }) {
+function ask({ title, msg = '', fields = [], ok = 'OK', danger = false, validate }, preset = []) {
   return new Promise(resolve => {
     $('dlgTitle').textContent = title; $('dlgMsg').textContent = msg; $('dlgErr').textContent = '';
     const box = $('dlgFields'); box.replaceChildren();
@@ -90,6 +90,7 @@ function ask({ title, msg = '', fields = [], ok = 'OK', danger = false, validate
         if (f.value) el.value = f.value;
         el.addEventListener('keydown', e => { if (e.key === 'Enter') $('dlgOk').click(); });
       }
+      if (preset[fields.indexOf(f)]) el.value = preset[fields.indexOf(f)];
       el.placeholder = f.placeholder || ''; el.setAttribute('aria-label', f.label || f.placeholder || 'Field');
       box.append(el); return el;
     });
@@ -191,18 +192,39 @@ function emptyState() {
   say('Open the Vaults menu to unlock a Vault.');
 }
 
-async function newDoc(vid) {
+const SIZES = [['letter', 'Letter (8.5 × 11 in)'], ['legal', 'Legal (8.5 × 14 in)'], ['a4', 'A4'], ['a5', 'A5'], ['postcard', 'Postcard (4 × 6 in)']];
+const DEFAULT_LAYOUT = { s: 'letter', o: 'portrait' };
+function fit() {   // shrink the page to fit narrow phone screens
+  const e = $('editor'); e.style.zoom = 1;
+  e.style.zoom = Math.min(1, ($('scroller').clientWidth - 20) / e.offsetWidth);
+}
+function applyLayout(d) {
+  const l = d.layout || DEFAULT_LAYOUT;
+  $('editor').className = 'page s-' + l.s + ' o-' + l.o; fit();
+}
+async function pickLayout(l) {
+  l = l || DEFAULT_LAYOUT;
+  const r = await ask({
+    title: 'Page layout', msg: 'Choose the page size and direction for this Doc.',
+    fields: [{ type: 'select', label: 'Page size', options: SIZES }, { type: 'select', label: 'Direction', options: [['portrait', 'Portrait'], ['landscape', 'Landscape']] }], ok: 'Apply'
+  }, [l.s, l.o]);
+  return r && { s: r[0], o: r[1] };
+}
+
+async function newDoc(vid, chooseLayout) {
   vid = vid || (cur && docs.get(cur) && docs.get(cur).vid) || [...vaults.keys()].find(isOpen);
   if (!vid || !isOpen(vid)) { say('Unlock a Vault first.'); return; }
+  let layout = DEFAULT_LAYOUT;
+  if (chooseLayout) { layout = await pickLayout(); if (!layout) return; }
   await saveNow();
-  const d = { id: crypto.randomUUID(), vid, title: '', html: '', updated: Date.now() };
+  const d = { id: crypto.randomUUID(), vid, title: '', html: '', layout, updated: Date.now() };
   docs.set(d.id, d); await persist(d); openV.add(vid); openDoc(d.id); closeDrawer(); $('editor').focus();
 }
 
 function openDoc(id) {
   const d = docs.get(id); if (!d) return;
   cur = id; setEnabled(true);
-  $('title').value = d.title; $('editor').innerHTML = sanitize(d.html);
+  $('title').value = d.title; $('editor').innerHTML = sanitize(d.html); applyLayout(d);
   say('Encrypted and saved on this device');
 }
 
@@ -255,7 +277,7 @@ function renderList() {
         sec.append(ul);
       } else { const p = document.createElement('p'); p.className = 'empty'; p.textContent = 'No Docs yet.'; sec.append(p); }
       const acts = document.createElement('div'); acts.className = 'acts';
-      acts.append(btn('New Doc', () => newDoc(v.id)), btn('Rename', () => renameVault(v.id)),
+      acts.append(btn('New Doc', () => newDoc(v.id, true)), btn('Rename', () => renameVault(v.id)),
         btn(v.protect ? 'Unprotect' : 'Protect', () => toggleProtect(v.id)));
       if (v.mode === 'own') acts.append(btn('Lock now', () => lockVault(v.id)));
       acts.append(btn('Delete Vault', () => deleteVault(v.id)));
@@ -479,6 +501,12 @@ $('imp').onchange = e => { if (e.target.files[0]) importBackup(e.target.files[0]
 $('title').addEventListener('input', queueSave);
 $('editor').addEventListener('input', queueSave);
 $('print').onclick = () => print();
+$('layout').onclick = async () => {
+  if (!cur || !docs.has(cur)) return;
+  const d = docs.get(cur), l = await pickLayout(d.layout);
+  if (l) { d.layout = l; applyLayout(d); queueSave(); }
+};
+addEventListener('resize', fit);
 
 // Remember the selection so toolbar menus (font, size, color) still apply to it.
 let lastRange = null;
