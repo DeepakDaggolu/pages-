@@ -34,6 +34,20 @@ const vidOf = e => (e && e.vid) || 'general';          // older Docs had no Vaul
 const keyFor = vid => { const v = vaults.get(vid); return !v ? null : v.mode === 'own' ? (vkeys.get(vid) || null) : key; };
 const isOpen = vid => !!keyFor(vid);
 
+/* ---------- "stay unlocked": the main key is kept on this phone (non-extractable) ---------- */
+const stayOn = () => localStorage.getItem('vw_stay') !== '0';
+const idb = () => new Promise((res, rej) => { const r = indexedDB.open('pages_kv', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+const idbDo = (mode, fn) => idb().then(db => new Promise((res, rej) => { const t = db.transaction('kv', mode), q = fn(t.objectStore('kv')); t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error); }));
+const idbGet = k => idbDo('readonly', st => st.get(k));
+const idbSet = (k, v) => idbDo('readwrite', st => st.put(v, k));
+const idbDel = k => idbDo('readwrite', st => st.delete(k));
+function updateStay() { $('stayBtn').textContent = stayOn() ? 'Stay unlocked: ON (tap to turn off)' : 'Stay unlocked: OFF (tap to turn on)'; }
+async function toggleStay() {
+  if (stayOn()) { localStorage.setItem('vw_stay', '0'); await idbDel('mainkey').catch(() => {}); say('Password will be needed every time.'); }
+  else { localStorage.setItem('vw_stay', '1'); await idbSet('mainkey', key).catch(() => {}); say('pages! will stay unlocked on this phone until you tap Lock.'); }
+  updateStay();
+}
+
 /* ---------- crypto ---------- */
 async function deriveKey(password, salt) {
   const base = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
@@ -141,6 +155,7 @@ async function submitLock() {
       key = k; fails = 0;
     }
     $('pw').value = ''; $('pw2').value = '';
+    if (stayOn()) idbSet('mainkey', key).catch(() => {});
     await openApp();
   } catch (e) { err('Something went wrong. Reload the page and try again.'); }
 }
@@ -176,7 +191,7 @@ async function persist(d) {
 /* ---------- app ---------- */
 async function openApp() {
   await loadVaults(); await loadDocs();
-  $('lock').hidden = true; $('app').hidden = false;
+  $('lock').hidden = true; $('app').hidden = false; updateStay();
   const first = [...docs.values()].sort(byUpdated)[0];
   if (first) openDoc(first.id);
   else {
@@ -447,7 +462,7 @@ function reset() {
   $('editor').replaceChildren(); $('title').value = ''; $('vaults').replaceChildren();
   $('dlg').hidden = true; closeDrawer();
 }
-async function lock() { await saveNow(); reset(); showLock(); }
+async function lock() { await saveNow(); idbDel('mainkey').catch(() => {}); reset(); showLock(); }
 
 /* ---------- backup ---------- */
 function exportBackup() {
@@ -469,17 +484,19 @@ async function importBackup(file) {
     localStorage.setItem(META, JSON.stringify(data.meta));
     (data.vaults || []).forEach(x => { if (/^vw_vault_[\w-]+$/.test(x.n)) localStorage.setItem(x.n, JSON.stringify(x.p)); });
     data.docs.forEach(x => { if (/^vw_doc_[\w-]+$/.test(x.n)) localStorage.setItem(x.n, JSON.stringify(x.p)); });
-    reset(); showLock();
+    idbDel('mainkey').catch(() => {}); reset(); showLock();
     err('Backup restored. Unlock with the backup’s main password.');
   } catch { say('That file is not a valid pages! backup.'); }
 }
 
 /* ---------- auto-lock ---------- */
-function resetIdle() { clearTimeout(idleTimer); if (key) idleTimer = setTimeout(lock, IDLE_MS); }
+async function lockOwn() { await saveNow(); for (const id of [...vkeys.keys()]) await lockVault(id); }
+const autoLock = () => stayOn() ? lockOwn() : lock();
+function resetIdle() { clearTimeout(idleTimer); if (key) idleTimer = setTimeout(autoLock, IDLE_MS); }
 ['pointerdown', 'keydown', 'input', 'scroll'].forEach(t => addEventListener(t, resetIdle, { passive: true }));
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) hiddenAt = Date.now();
-  else if (key && Date.now() - hiddenAt > HIDDEN_MS) lock();
+  else if (key && Date.now() - hiddenAt > HIDDEN_MS) autoLock();
 });
 
 /* ---------- UI wiring ---------- */
@@ -493,6 +510,7 @@ $('lockBtn').onclick = lock;
 $('menu').onclick = openDrawer;
 $('closeDrawer').onclick = closeDrawer;
 $('newVault').onclick = createVault;
+$('stayBtn').onclick = toggleStay;
 $('saveFile').onclick = saveToPhone;
 $('del').onclick = deleteDoc;
 $('delAll').onclick = deleteEverything;
@@ -653,4 +671,13 @@ $('openBtn').onclick = () => $('openFile').click();
 $('openFile').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) importFile(f); };
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
-showLock();
+(async () => {
+  try {
+    const meta = getMeta();
+    if (meta && stayOn()) {
+      const k = await idbGet('mainkey');
+      if (k) { await decrypt(k, meta.check); key = k; await openApp(); return; }
+    }
+  } catch { idbDel('mainkey').catch(() => {}); }
+  showLock();
+})();
