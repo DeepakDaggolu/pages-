@@ -109,3 +109,26 @@ input,select{font:inherit;color:inherit;background:var(--paper);border:1px solid
 @page a5-p{size:148mm 210mm;margin:.75in}.s-a5.o-portrait{page:a5-p}
 @page a5-l{size:210mm 148mm;margin:.75in}.s-a5.o-landscape{page:a5-l}
 @media print{.scroller{overflow:visible;padding:0}.page{zoom:1!important;min-height:0;box-shadow:none}}
+
+/* ---- colour theme ---- */
+:root{--bg:#eef1fb;--accent:#5b3df5;--accent-ink:#fff;--pink:#e0307a;--teal:#0d9488;--amber:#f59e0b;--sky:#0ea5e9;--line:#d3d9ee;--bar1:#5b3df5;--bar2:#e0307a}
+@media (prefers-color-scheme:dark){:root{--bg:#11142a;--paper:#1b1f38;--accent:#a78bfa;--accent-ink:#1b0f45;--pink:#ff7aa8;--teal:#2dd4bf;--amber:#fbbf24;--sky:#38bdf8;--line:#2d3358;--bar1:#4c2fd1;--bar2:#b81f62}}
+@media screen{
+  body{background:linear-gradient(160deg,var(--bg),color-mix(in srgb,var(--bg) 78%,var(--pink)))}
+  .lock h1{background:linear-gradient(90deg,var(--bar1),var(--bar2));-webkit-background-clip:text;background-clip:text;color:transparent;font-size:2.4rem}
+  .lock button,.primary{background:linear-gradient(90deg,var(--bar1),var(--bar2));color:#fff;border:0}
+  .bar{background:linear-gradient(90deg,var(--bar1),var(--bar2));border-radius:0 0 16px 16px;padding:10px}
+  .bar button{background:rgba(255,255,255,.18);color:#fff;border-color:rgba(255,255,255,.45)}
+  .bar #title{background:var(--paper);color:var(--ink);border-color:transparent}
+  .tools button[data-cmd]{border-bottom:3px solid var(--teal)}
+  .tools button[data-block]{border-bottom:3px solid var(--amber)}
+  .tools #hl,.tools #imgBtn{border-bottom:3px solid var(--pink)}
+  .tools #layout,.tools #link{border-bottom:3px solid var(--sky)}
+  .tools button:active{background:var(--accent);color:var(--accent-ink)}
+  .page{box-shadow:0 6px 24px rgba(91,61,245,.25)}
+  .page img{max-width:100%;height:auto;border-radius:6px}
+  .vault{border-left:6px solid var(--accent)}
+  .vault:nth-child(5n+2){border-left-color:var(--pink)}.vault:nth-child(5n+3){border-left-color:var(--teal)}
+  .vault:nth-child(5n+4){border-left-color:var(--amber)}.vault:nth-child(5n+5){border-left-color:var(--sky)}
+  .chip{background:color-mix(in srgb,var(--accent) 14%,transparent);border-color:transparent;color:var(--ink)}
+}
