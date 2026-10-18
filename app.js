@@ -52,7 +52,7 @@ async function decrypt(k, p) {
 }
 
 /* ---------- sanitizer (allow-list) ---------- */
-const TAGS = new Set(['P','BR','B','STRONG','I','EM','U','S','STRIKE','H1','H2','H3','UL','OL','LI','BLOCKQUOTE','A','DIV','SPAN','FONT','MARK']);
+const TAGS = new Set(['P','BR','B','STRONG','I','EM','U','S','STRIKE','H1','H2','H3','UL','OL','LI','BLOCKQUOTE','A','DIV','SPAN','FONT','MARK','IMG']);
 const FACES = new Set(['pg-serif','pg-sans','pg-mono','pg-hand']);
 const ALIGNABLE = new Set(['P','DIV','H1','H2','H3','LI','BLOCKQUOTE']);
 function sanitize(html) {
@@ -64,6 +64,7 @@ function sanitize(html) {
         const t = el.tagName, n = a.name, v = a.value.trim();
         const ok = (t === 'A' && n === 'href' && /^(https?:|mailto:)/i.test(v))
           || (t === 'FONT' && ((n === 'face' && FACES.has(v)) || (n === 'size' && /^[1-7]$/.test(v)) || (n === 'color' && /^#[0-9a-f]{6}$/i.test(v))))
+          || (t === 'IMG' && ((n === 'src' && /^data:image\/(png|jpeg|webp|gif);base64,/i.test(v)) || n === 'alt'))
           || (ALIGNABLE.has(t) && n === 'align' && /^(left|center|right|justify)$/.test(v));
         if (!ok) el.removeAttribute(n);
       });
@@ -413,7 +414,7 @@ const FILE_CSS = 'body{max-width:720px;margin:2rem auto;padding:0 1rem;font:18px
   + 'font[size="1"]{font-size:.7em}font[size="2"]{font-size:.85em}font[size="4"]{font-size:1.15em}font[size="5"]{font-size:1.5em}'
   + 'font[size="6"]{font-size:2em}font[size="7"]{font-size:2.6em}mark{background:#ffe066}'
   + 'blockquote{margin:1em 0;padding-left:14px;border-left:3px solid #999;color:#555}'
-  + '[align=center]{text-align:center}[align=right]{text-align:right}[align=justify]{text-align:justify}';
+  + 'img{max-width:100%;height:auto}[align=center]{text-align:center}[align=right]{text-align:right}[align=justify]{text-align:justify}';
 
 function download(name, type, text) {
   const url = URL.createObjectURL(new Blob([text], { type }));
@@ -564,11 +565,92 @@ $('link').onclick = async () => {
   if (r) { $('editor').focus(); if (rng) { sel.removeAllRanges(); sel.addRange(rng); } document.execCommand('createLink', false, r[0].trim()); queueSave(); }
 };
 
-// Paste as plain text so nothing hidden comes along.
+// Paste: images (screenshots) are shrunk and inserted; everything else is pasted as plain text.
+function imgToData(file) {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onerror = rej;
+    fr.onload = () => {
+      const im = new Image();
+      im.onerror = rej;
+      im.onload = () => {
+        const k = Math.min(1, 1000 / im.width), c = document.createElement('canvas');
+        c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+        const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(im, 0, 0, c.width, c.height);
+        res(c.toDataURL('image/jpeg', 0.82));
+      };
+      im.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+async function insertImage(file) {
+  try { document.execCommand('insertImage', false, await imgToData(file)); queueSave(); }
+  catch { say('Could not add that image.'); }
+}
 $('editor').addEventListener('paste', e => {
   e.preventDefault();
-  document.execCommand('insertText', false, (e.clipboardData || window.clipboardData).getData('text/plain'));
+  const cd = e.clipboardData || window.clipboardData;
+  const img = [...(cd.files || [])].find(f => /^image\//.test(f.type));
+  if (img) insertImage(img); else document.execCommand('insertText', false, cd.getData('text/plain'));
 });
+$('imgBtn').onclick = () => { if (editable()) $('imgIn').click(); };
+$('imgIn').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) { restoreSel(); insertImage(f); } };
+
+/* ---------- open files from the phone (.docx, .txt, .md, .html) ---------- */
+async function readDocx(buf) {   // minimal zip reader: returns the text of word/document.xml
+  const dv = new DataView(buf), u8 = new Uint8Array(buf);
+  let e = buf.byteLength - 22; while (e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
+  if (e < 0) throw 0;
+  let p = dv.getUint32(e + 16, true);
+  for (let i = 0, n = dv.getUint16(e + 10, true); i < n; i++) {
+    const method = dv.getUint16(p + 10, true), size = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true);
+    const xl = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true), off = dv.getUint32(p + 42, true);
+    const name = dec.decode(u8.subarray(p + 46, p + 46 + nl)); p += 46 + nl + xl + cl;
+    if (name !== 'word/document.xml') continue;
+    const start = off + 30 + dv.getUint16(off + 26, true) + dv.getUint16(off + 28, true), data = u8.subarray(start, start + size);
+    if (method === 0) return dec.decode(data);
+    return dec.decode(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+  }
+  throw 0;
+}
+function docxToHtml(xml) {
+  const d = new DOMParser().parseFromString(xml, 'application/xml'); let out = '';
+  for (const p of d.getElementsByTagName('w:p')) {
+    const st = p.getElementsByTagName('w:pStyle')[0], sv = (st && st.getAttribute('w:val')) || '';
+    const tag = /^(Title|Heading1)$/i.test(sv) ? 'h1' : /^Heading[2-9]$/i.test(sv) ? 'h2' : 'p';
+    const jc = p.getElementsByTagName('w:jc')[0], al = jc && jc.getAttribute('w:val');
+    let h = p.getElementsByTagName('w:numPr')[0] ? '• ' : '';
+    for (const r of p.getElementsByTagName('w:r')) {
+      let t = '';
+      for (const c of r.childNodes) {
+        if (c.nodeName === 'w:t') t += esc(c.textContent); else if (c.nodeName === 'w:tab') t += '&emsp;'; else if (c.nodeName === 'w:br') t += '<br>';
+      }
+      if (!t) continue;
+      const on = n => { const x = r.getElementsByTagName(n)[0]; return x && !['0', 'false', 'none'].includes(x.getAttribute('w:val')); };
+      if (on('w:b')) t = '<b>' + t + '</b>'; if (on('w:i')) t = '<i>' + t + '</i>'; if (on('w:u')) t = '<u>' + t + '</u>';
+      h += t;
+    }
+    const a = al === 'center' || al === 'right' ? ' align="' + al + '"' : al === 'both' ? ' align="justify"' : '';
+    out += '<' + tag + a + '>' + (h || '<br>') + '</' + tag + '>';
+  }
+  return out;
+}
+async function importFile(f) {
+  const vid = (cur && docs.get(cur) && docs.get(cur).vid) || [...vaults.keys()].find(isOpen);
+  if (!vid) { say('Unlock a Vault first.'); return; }
+  const ext = (f.name.split('.').pop() || '').toLowerCase(); let html;
+  try {
+    if (ext === 'docx') html = docxToHtml(await readDocx(await f.arrayBuffer()));
+    else if (ext === 'html' || ext === 'htm') html = await f.text();
+    else html = (await f.text()).split(/\r?\n/).map(l => '<p>' + (esc(l) || '<br>') + '</p>').join('');
+  } catch { say('Could not open that file. Supported: .docx, .txt, .md, .html (older .doc files are not).'); return; }
+  await saveNow();
+  const d = { id: crypto.randomUUID(), vid, title: f.name.replace(/\.[^.]+$/, '').slice(0, 120), html: sanitize(html), layout: DEFAULT_LAYOUT, updated: Date.now() };
+  docs.set(d.id, d); await persist(d); openV.add(vid); openDoc(d.id); closeDrawer(); say('Opened “' + d.title + '”.');
+}
+$('openBtn').onclick = () => $('openFile').click();
+$('openFile').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) importFile(f); };
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 showLock();
