@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data: blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<title>pages!</title>
+<link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.json">
+</head>
+<body>
+
+<main id="lock" class="lock">
+  <h1>pages!</h1>
+  <p id="lockHint">Create a main password. It protects everything in pages! on this device and cannot be recovered if you forget it.</p>
+  <input id="pw" type="password" autocomplete="off" placeholder="Password" aria-label="Password">
+  <input id="pw2" type="password" autocomplete="off" placeholder="Repeat password" aria-label="Repeat password">
+  <button id="go" type="button">Set password</button>
+  <p id="err" class="err" role="alert"></p>
+</main>
+
+<div id="app" hidden>
+  <header class="bar">
+    <button id="menu" type="button" aria-label="Vaults">Vaults</button>
+    <input id="title" type="text" maxlength="120" placeholder="Untitled" aria-label="Doc title">
+    <button id="lockBtn" type="button">Lock</button>
+  </header>
+
+  <div class="ribbon">
+    <div class="tabs" role="tablist">
+      <button data-tab="home" class="on" role="tab">Home</button>
+      <button data-tab="insert" role="tab">Insert</button>
+      <button data-tab="layout" role="tab">Layout</button>
+    </div>
+    <nav class="tools" data-panel="home" aria-label="Home">
+      <select id="fontFace" aria-label="Font"><option value="">Font</option><option value="pg-serif">Serif</option><option value="pg-sans">Sans</option><option value="pg-mono">Mono</option><option value="pg-hand">Handwritten</option></select>
+      <select id="fontSize" aria-label="Size"><option value="">Size</option><option value="2">Small</option><option value="3">Normal</option><option value="5">Large</option><option value="6">Huge</option></select>
+      <select id="fontColor" aria-label="Text color"><option value="">Color</option><option value="none">Default</option><option value="#d93025">Red</option><option value="#e8710a">Orange</option><option value="#188038">Green</option><option value="#1a73e8">Blue</option><option value="#8e24aa">Purple</option><option value="#6b7785">Gray</option></select>
+      <button id="hl" aria-label="Highlight">Highlight</button>
+      <span class="sep"></span>
+      <button data-cmd="bold" aria-label="Bold"><b>B</b></button>
+      <button data-cmd="italic" aria-label="Italic"><i>I</i></button>
+      <button data-cmd="underline" aria-label="Underline"><u>U</u></button>
+      <button data-cmd="strikeThrough" aria-label="Strikethrough"><s>S</s></button>
+      <span class="sep"></span>
+      <button data-block="h1">H1</button><button data-block="h2">H2</button><button data-block="p">Text</button><button data-block="blockquote">Quote</button>
+      <span class="sep"></span>
+      <button data-cmd="insertUnorderedList">Bullets</button><button data-cmd="insertOrderedList">Numbers</button>
+      <button data-cmd="justifyLeft">Left</button><button data-cmd="justifyCenter">Center</button><button data-cmd="justifyRight">Right</button><button data-cmd="justifyFull">Justify</button>
+      <span class="sep"></span>
+      <button data-cmd="removeFormat">Clear</button><button data-cmd="undo">Undo</button><button data-cmd="redo">Redo</button>
+    </nav>
+    <nav class="tools" data-panel="insert" aria-label="Insert" hidden>
+      <button id="imgBtn">Image</button>
+      <input id="imgIn" type="file" accept="image/*" hidden>
+      <button id="pasteImg">Paste image</button>
+      <button id="tableBtn">Table</button>
+      <button id="link">Link</button>
+      <button data-cmd="insertHorizontalRule">Line</button>
+    </nav>
+    <nav class="tools" data-panel="layout" aria-label="Layout" hidden>
+      <button id="layout">Size &amp; direction</button>
+      <select id="margins" aria-label="Margins"><option value="">Margins</option><option value="narrow">Narrow</option><option value="normal">Normal</option><option value="wide">Wide</option></select>
+      <select id="pageColor" aria-label="Page color"><option value="">Page color</option><option value="#ffffff">White</option><option value="#fff8e1">Cream</option><option value="#eceff1">Light gray</option><option value="#e3f2fd">Light blue</option><option value="#e8f5e9">Light green</option><option value="#fce4ec">Light pink</option><option value="#1e1e1e">Dark</option></select>
+      <select id="docColor" aria-label="Doc text color"><option value="">Text color</option><option value="#000000">Black</option><option value="#333333">Dark gray</option><option value="#0b3d91">Navy</option><option value="#b00020">Red</option><option value="#1b5e20">Green</option><option value="#4a148c">Purple</option><option value="#ffffff">White</option></select>
+      <button id="print">Print / PDF</button>
+    </nav>
+  </div>
+
+  <div id="scroller" class="scroller"><div id="editor" class="page s-letter o-portrait" contenteditable="true" spellcheck="true" aria-label="Doc"></div></div>
+  <p id="status" class="status" aria-live="polite"></p>
+
+  <aside id="drawer" class="drawer" hidden>
+    <div class="drawer-head">
+      <strong>Vaults</strong>
+      <button id="closeDrawer" type="button">Close</button>
+    </div>
+    <button id="newVault" type="button" class="primary">New Vault</button>
+    <button id="openBtn" type="button">Open a file from phone</button>
+    <input id="openFile" type="file" accept=".docx,.txt,.md,.html,.htm,text/plain,text/html" hidden>
+    <div id="vaults"></div>
+    <div class="drawer-foot">
+      <button id="stayBtn" type="button"></button>
+      <button id="saveFile" type="button">Save to phone</button>
+      <button id="del" type="button">Delete this Doc</button>
+      <button id="delAll" type="button">Delete everything</button>
+      <button id="exp" type="button">Export encrypted backup</button>
+      <button id="impBtn" type="button">Restore from backup</button>
+      <input id="imp" type="file" accept=".json,application/json" hidden>
+      <p class="small">Everything is encrypted on your device with AES-256-GCM. Nothing is sent anywhere. Protected Vaults are skipped by Delete everything.</p>
+    </div>
+  </aside>
+
+  <div id="dlg" class="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+    <div class="dlg-box">
+      <h2 id="dlgTitle"></h2>
+      <p id="dlgMsg"></p>
+      <div id="dlgFields"></div>
+      <p id="dlgErr" class="err" role="alert"></p>
+      <div class="dlg-btns">
+        <button id="dlgCancel" type="button">Cancel</button>
+        <button id="dlgOk" type="button" class="primary">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
